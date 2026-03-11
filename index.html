@@ -576,12 +576,9 @@ function drawHUD() {
 
   drawMinimap();
 
-  if ('ontouchstart' in window) {
-    ctx.fillStyle = '#ffffff08';
-    ctx.fillRect(0, H * 0.3, W / 2, H * 0.4); ctx.fillRect(W / 2, H * 0.3, W / 2, H * 0.4);
-    ctx.fillStyle = '#ffffff18'; ctx.font = '24px ' + GF; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('◀', W * 0.12, H * 0.5); ctx.fillText('▶', W * 0.88, H * 0.5);
-  }
+  // Reset any leftover shadow
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
 }
 
 function drawMinimap() {
