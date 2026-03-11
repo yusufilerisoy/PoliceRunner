@@ -31,9 +31,7 @@ canvas { display: block; }
   position: absolute;
   top: 0; bottom: 0;
   width: 100%;
-  max-width: 420px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0; right: 0;
   pointer-events: none;
   display: flex;
   justify-content: center;
@@ -119,7 +117,8 @@ const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 let W, H;
 function resize() {
-  W = Math.min(420, window.innerWidth);
+  const isMobile = 'ontouchstart' in window || window.innerWidth <= 500;
+  W = isMobile ? window.innerWidth : Math.min(420, window.innerWidth);
   H = window.innerHeight;
   canvas.width = W;
   canvas.height = H;
