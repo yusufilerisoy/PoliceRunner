@@ -1,0 +1,22 @@
+{
+  "name": "Police Runner - Drift & Escape",
+  "short_name": "Police Runner",
+  "description": "Drift at, polislerden kac!",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#0A0F2C",
+  "theme_color": "#0A0F2C",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0A0F2C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Police Runner">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<title>Police Runner - Drift & Escape</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0A0F2C;
+  overflow: hidden;
+  font-family: 'Orbitron', 'Segoe UI', Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  color: #F5F7FA;
+  touch-action: none;
+}
+canvas { display: block; }
+#ui {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 100%;
+  max-width: 420px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+#startScreen, #gameOverScreen {
+  pointer-events: all;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(10,15,44,0.94);
+  padding: 30px 25px;
+  border-radius: 20px;
+  border: 2px solid #1E5BFF44;
+  box-shadow: 0 0 60px #1E5BFF33, 0 0 120px #FF1F3D22;
+}
+#gameOverScreen { display: none; }
+h1 {
+  font-size: 36px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  text-shadow: 0 0 20px #1E5BFF, 0 0 40px #FF1F3D;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+h2 {
+  font-size: 28px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  text-shadow: 0 0 20px #FF1F3D;
+  letter-spacing: 3px;
+}
+.subtitle { font-size: 13px; color: #5DA9FF; margin-bottom: 25px; letter-spacing: 2px; }
+.btn {
+  padding: 14px 50px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #1E5BFF, #3A4BFF);
+  color: #F5F7FA;
+  box-shadow: 0 0 20px rgba(30,91,255,0.5);
+  transition: all 0.3s;
+  margin: 8px;
+}
+.btn:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(30,91,255,0.8); }
+.stats { font-size: 14px; margin: 12px 0; color: #FFD700; line-height: 2; letter-spacing: 1px; }
+.record { color: #00E5A8; font-size: 12px; margin-top: 8px; letter-spacing: 1px; }
+.controls-info { font-size: 10px; color: #6C757D; margin-top: 18px; line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui">
+  <div id="startScreen">
+    <h1>POLICE RUNNER</h1>
+    <p class="subtitle">Drift at, polislerden kac!</p>
+    <div class="record" id="startRecord"></div>
+    <button class="btn" onclick="startGame()">BASLA</button>
+    <p class="controls-info">
+      ← / A = Sola drift &nbsp; → / D = Saga drift<br>
+      Basili tut = Drift! &nbsp; Birak = Duz git<br>
+      Mobil: Ekranin sol/sag yarisina basili tut
+    </p>
+  </div>
+  <div id="gameOverScreen">
+    <h2>YAKALANDIN!</h2>
+    <div class="stats" id="finalStats"></div>
+    <div class="record" id="endRecord"></div>
+    <button class="btn" onclick="startGame()">TEKRAR OYNA</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = Math.min(420, window.innerWidth);
+  H = window.innerHeight;
+  canvas.width = W;
+  canvas.height = H;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============ RECORDS ============
+function getBestTime() {
+  return parseInt(localStorage.getItem('policeRunnerBestTime') || '0');
+}
+function setBestTime(t) {
+  const best = getBestTime();
+  if (t > best) {
+    localStorage.setItem('policeRunnerBestTime', t.toString());
+    return true;
+  }
+  return false;
+}
+function getBestScore() {
+  return parseInt(localStorage.getItem('policeRunnerBestScore') || '0');
+}
+function setBestScore(s) {
+  const best = getBestScore();
+  if (s > best) {
+    localStorage.setItem('policeRunnerBestScore', s.toString());
+    return true;
+  }
+  return false;
+}
+function showStartRecords() {
+  const bt = getBestTime();
+  const bs = getBestScore();
+  const el = document.getElementById('startRecord');
+  if (bt > 0) {
+    el.innerHTML = `REKOR SURE: ${bt}s &nbsp; REKOR SKOR: ${bs}`;
+  } else {
+    el.innerHTML = '';
+  }
+}
+showStartRecords();
+
+// ============ COLORS ============
+const COL = {
+  ground: '#2B2E3A',
+  trail: '#FFD500',
+  sirenBlue: '#1E5BFF',
+  sirenRed: '#FF1F3D',
+  glowBlue: '#5DA9FF',
+  glowRed: '#FF6B7A',
+  white: '#F5F7FA',
+  coin: '#FFD700',
+  playerCar: '#FF7A00',
+  policeCar: '#1E5BFF',
+  booster: '#FF3B30',
+  damageBar: '#FF3B30',
+  rage: '#7B61FF',
+};
+
+// ============ GAME STATE ============
+let game = {};
+const POLICE_MAX = 12;
+
+function resetGame() {
+  game = {
+    state: 'waiting',
+    score: 0,
+    time: 0,
+    coins: 0,
+    player: {
+      x: 0, y: 0,
+      angle: -Math.PI / 2,
+      speed: 2.5,
+      baseSpeed: 2.5,
+      maxSpeed: 7,
+      turnSpeed: 0.032,
+      driftTurnSpeed: 0.032,
+      w: 18,
+      h: 34,
+      health: 100,
+      invincible: 0,
+      boostTimer: 0,
+      rageTimer: 0,
+      normalW: 18,
+      normalH: 34,
+    },
+    police: [],
+    boosters: [],
+    rageItems: [],
+    coinItems: [],
+    trail: [],
+    policeTrails: {},
+    particles: [],
+    camera: { x: 0, y: 0 },
+    sirenPhase: 0,
+    wantedLevel: 1,
+    wantedTimer: 0,
+    spawnTimer: 0,
+    boosterTimer: 0,
+    rageSpawnTimer: 0,
+    coinSpawnTimer: 0,
+    shakeTimer: 0,
+    shakeIntensity: 0,
+    policeIdCounter: 0,
+    difficulty: 1, // increases over time
+  };
+
+  for (let i = 0; i < 2; i++) spawnPolice();
+  for (let i = 0; i < 8; i++) spawnBooster();
+  for (let i = 0; i < 3; i++) spawnRage();
+  for (let i = 0; i < 10; i++) spawnCoin();
+}
+
+function spawnPolice() {
+  if (game.police.length >= POLICE_MAX) return;
+  const p = game.player;
+  // Higher difficulty = more chance to spawn ahead of player
+  const frontChance = Math.min(0.5, game.difficulty * 0.08);
+  let angle;
+  if (Math.random() < frontChance) {
+    // Spawn ahead: player's angle +/- 40 degrees
+    angle = p.angle + (Math.random() - 0.5) * 1.4;
+  } else {
+    angle = Math.random() * Math.PI * 2;
+  }
+  const dist = 400 + Math.random() * 300;
+  const id = game.policeIdCounter++;
+  const diff = game.difficulty;
+  game.police.push({
+    id,
+    x: p.x + Math.cos(angle) * dist,
+    y: p.y + Math.sin(angle) * dist,
+    angle: Math.random() * Math.PI * 2,
+    speed: 0,
+    baseSpeed: Math.min(3.0 + diff * 0.35, 7.0),
+    turnSpeed: Math.min(0.025 + diff * 0.004, 0.08),
+    w: 20,
+    h: 38,
+    stuckTimer: 0,
+    lastX: 0, lastY: 0,
+  });
+  game.policeTrails[id] = [];
+}
+
+function spawnBooster() {
+  const p = game.player;
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 350 + Math.random() * 600;
+  game.boosters.push({
+    x: p.x + Math.cos(angle) * dist,
+    y: p.y + Math.sin(angle) * dist,
+    bobPhase: Math.random() * Math.PI * 2,
+  });
+}
+
+function spawnCoin() {
+  const p = game.player;
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 250 + Math.random() * 600;
+  game.coinItems.push({
+    x: p.x + Math.cos(angle) * dist,
+    y: p.y + Math.sin(angle) * dist,
+    bobPhase: Math.random() * Math.PI * 2,
+  });
+}
+
+function spawnRage() {
+  const p = game.player;
+  const angle = Math.random() * Math.PI * 2;
+  const dist = 450 + Math.random() * 700;
+  game.rageItems.push({
+    x: p.x + Math.cos(angle) * dist,
+    y: p.y + Math.sin(angle) * dist,
+    bobPhase: Math.random() * Math.PI * 2,
+  });
+}
+
+// ============ INPUT ============
+const keys = {};
+let touchLeft = false, touchRight = false;
+let isDrifting = false;
+
+document.addEventListener('keydown', e => { keys[e.key] = true; keys[e.code] = true; });
+document.addEventListener('keyup', e => { keys[e.key] = false; keys[e.code] = false; });
+
+canvas.addEventListener('touchstart', handleTouch, { passive: false });
+canvas.addEventListener('touchmove', handleTouch, { passive: false });
+canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+function handleTouch(e) {
+  e.preventDefault();
+  touchLeft = false; touchRight = false;
+  for (const t of e.touches) {
+    if (t.clientX < W / 2) touchLeft = true;
+    else touchRight = true;
+  }
+}
+function handleTouchEnd(e) {
+  e.preventDefault();
+  touchLeft = false; touchRight = false;
+  for (const t of e.touches) {
+    if (t.clientX < W / 2) touchLeft = true;
+    else touchRight = true;
+  }
+}
+
+function isLeft() { return keys['ArrowLeft'] || keys['a'] || keys['A'] || touchLeft; }
+function isRight() { return keys['ArrowRight'] || keys['d'] || keys['D'] || touchRight; }
+
+// ============ WORLD ============
+function worldToScreen(wx, wy) {
+  return {
+    x: (wx - game.camera.x) + W / 2,
+    y: (wy - game.camera.y) + H / 2,
+  };
+}
+
+function isOnScreen(wx, wy, margin) {
+  return Math.abs(wx - game.camera.x) < W / 2 + margin &&
+         Math.abs(wy - game.camera.y) < H / 2 + margin;
+}
+
+// ============ DRAWING ============
+function drawGround() {
+  ctx.fillStyle = COL.ground;
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#323648';
+  ctx.lineWidth = 1;
+  const gridSize = 80;
+  const offX = (-game.camera.x % gridSize + gridSize) % gridSize;
+  const offY = (-game.camera.y % gridSize + gridSize) % gridSize;
+  for (let x = offX; x < W; x += gridSize) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let y = offY; y < H; y += gridSize) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+}
+
+function drawTrail(trail, color, baseWidth) {
+  if (trail.length < 2) return;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = baseWidth;
+  ctx.lineCap = 'round';
+  for (let i = 1; i < trail.length; i++) {
+    const prev = trail[i - 1];
+    const curr = trail[i];
+    const dx = curr.x - prev.x;
+    const dy = curr.y - prev.y;
+    if (dx * dx + dy * dy > 400) continue;
+    if (!isOnScreen(curr.x, curr.y, 50) && !isOnScreen(prev.x, prev.y, 50)) continue;
+    const s1 = worldToScreen(prev.x, prev.y);
+    const s2 = worldToScreen(curr.x, curr.y);
+    ctx.globalAlpha = Math.min(1, curr.alpha || 0.7);
+    ctx.beginPath(); ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawSmoke(trail, color) {
+  if (trail.length === 0) return;
+  trail.forEach(t => {
+    if (!isOnScreen(t.x, t.y, 30)) return;
+    const s = worldToScreen(t.x, t.y);
+    const r = (t.size || 5);
+    ctx.globalAlpha = t.alpha * 0.6;
+    const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+    grad.addColorStop(0, color + '88');
+    grad.addColorStop(0.5, color + '33');
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawCar(wx, wy, angle, w, h, color, isPolice) {
+  const s = worldToScreen(wx, wy);
+  if (s.x < -80 || s.x > W + 80 || s.y < -80 || s.y > H + 80) return;
+
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(angle + Math.PI / 2);
+
+  ctx.fillStyle = '#00000055';
+  roundRectFill(-w / 2 + 3, -h / 2 + 3, w, h, 4);
+
+  ctx.fillStyle = isPolice ? '#0D1B4A' : color;
+  roundRectFill(-w / 2, -h / 2, w, h, 4);
+
+  ctx.fillStyle = isPolice ? '#162555' : shadeColor(color, 25);
+  roundRectFill(-w / 2 + 2, -h / 2 + 2, w - 4, h * 0.4, 3);
+
+  ctx.fillStyle = '#1a2a5a';
+  ctx.fillRect(-w / 2 + 3, -h / 2 + 3, w - 6, h * 0.2);
+  ctx.fillRect(-w / 2 + 4, h / 2 - h * 0.18, w - 8, h * 0.14);
+
+  if (isPolice) {
+    const blueOn = Math.sin(game.sirenPhase) > 0;
+    ctx.fillStyle = blueOn ? COL.sirenBlue : '#0a1a44';
+    ctx.fillRect(-w / 2 + 2, -3, w / 2 - 3, 6);
+    if (blueOn) { ctx.shadowColor = COL.sirenBlue; ctx.shadowBlur = 12; ctx.fillRect(-w / 2 + 2, -3, w / 2 - 3, 6); ctx.shadowBlur = 0; }
+    ctx.fillStyle = !blueOn ? COL.sirenRed : '#2a0a0a';
+    ctx.fillRect(1, -3, w / 2 - 3, 6);
+    if (!blueOn) { ctx.shadowColor = COL.sirenRed; ctx.shadowBlur = 12; ctx.fillRect(1, -3, w / 2 - 3, 6); ctx.shadowBlur = 0; }
+    ctx.fillStyle = COL.white; ctx.font = 'bold 5px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('POLIS', 0, h * 0.12);
+  }
+
+  ctx.fillStyle = '#FFD166';
+  ctx.fillRect(-w / 2 + 2, -h / 2, 3, 3); ctx.fillRect(w / 2 - 5, -h / 2, 3, 3);
+  ctx.fillStyle = '#FF3B30';
+  ctx.fillRect(-w / 2 + 2, h / 2 - 3, 3, 3); ctx.fillRect(w / 2 - 5, h / 2 - 3, 3, 3);
+
+  ctx.restore();
+
+  if (isPolice) {
+    const blueOn = Math.sin(game.sirenPhase) > 0;
+    const glowCol = blueOn ? COL.sirenBlue : COL.sirenRed;
+    const glow = ctx.createRadialGradient(s.x, s.y, 5, s.x, s.y, 50);
+    glow.addColorStop(0, glowCol + '18'); glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(s.x, s.y, 50, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawRageItems() {
+  game.rageItems.forEach(r => {
+    if (!isOnScreen(r.x, r.y, 40)) return;
+    r.bobPhase += 0.06;
+    const s = worldToScreen(r.x, r.y);
+    const scale = 1 + Math.sin(r.bobPhase) * 0.2;
+    const pulse = 0.6 + Math.sin(r.bobPhase * 2) * 0.4;
+    const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 30 * scale);
+    glow.addColorStop(0, COL.rage + '66'); glow.addColorStop(0.6, COL.rage + '22'); glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(s.x, s.y, 30 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.font = `${22 * scale}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.7 + pulse * 0.3; ctx.fillText('☠️', s.x, s.y); ctx.globalAlpha = 1;
+  });
+}
+
+function drawBoosters() {
+  game.boosters.forEach(b => {
+    if (!isOnScreen(b.x, b.y, 40)) return;
+    b.bobPhase += 0.06;
+    const s = worldToScreen(b.x, b.y);
+    const scale = 1 + Math.sin(b.bobPhase) * 0.15;
+    const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 25 * scale);
+    glow.addColorStop(0, COL.booster + '55'); glow.addColorStop(0.6, COL.booster + '18'); glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(s.x, s.y, 25 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = COL.booster; ctx.font = `${20 * scale}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🧨', s.x, s.y);
+  });
+}
+
+function drawCoins() {
+  game.coinItems.forEach(c => {
+    if (!isOnScreen(c.x, c.y, 40)) return;
+    c.bobPhase += 0.04;
+    const s = worldToScreen(c.x, c.y);
+    const bob = Math.sin(c.bobPhase) * 2;
+    const y = s.y + bob;
+    const r = 9;
+    const glow = ctx.createRadialGradient(s.x, y, 0, s.x, y, 20);
+    glow.addColorStop(0, '#FFD70044'); glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(s.x, y, 20, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#B8960F'; ctx.beginPath(); ctx.arc(s.x, y, r, 0, Math.PI * 2); ctx.fill();
+    const coinGrad = ctx.createRadialGradient(s.x - 2, y - 2, 0, s.x, y, r);
+    coinGrad.addColorStop(0, '#FFF0A0'); coinGrad.addColorStop(0.4, '#FFD700'); coinGrad.addColorStop(1, '#C8A200');
+    ctx.fillStyle = coinGrad; ctx.beginPath(); ctx.arc(s.x, y, r - 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#B8960F'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(s.x, y, r - 3.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#B8960F'; ctx.font = 'bold 9px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('$', s.x, y + 0.5);
+    ctx.fillStyle = '#FFFFFF44'; ctx.beginPath(); ctx.arc(s.x - 2, y - 3, 3, 0, Math.PI * 2); ctx.fill();
+  });
+}
+
+function drawParticles() {
+  game.particles.forEach(pt => {
+    const s = worldToScreen(pt.x, pt.y);
+    ctx.globalAlpha = pt.life / pt.maxLife;
+    ctx.fillStyle = pt.color;
+    ctx.beginPath(); ctx.arc(s.x, s.y, pt.size * (pt.life / pt.maxLife), 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function addParticles(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    game.particles.push({ x, y, vx: (Math.random() - 0.5) * 5, vy: (Math.random() - 0.5) * 5,
+      life: 15 + Math.random() * 20, maxLife: 35, color, size: 2 + Math.random() * 4 });
+  }
+}
+
+function drawHUD() {
+  const timeSec = Math.floor(game.time / 60);
+  const bestTime = getBestTime();
+
+  const GF = "'Orbitron',sans-serif";
+  ctx.fillStyle = COL.white; ctx.font = 'bold 20px ' + GF; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText('SKOR: ' + game.score, 15, 15);
+
+  ctx.fillStyle = COL.coin; ctx.font = 'bold 15px ' + GF;
+  ctx.fillText('COIN: ' + game.coins, 15, 42);
+
+  // Time + best
+  ctx.fillStyle = COL.white + 'AA'; ctx.font = '12px ' + GF;
+  ctx.fillText('SURE: ' + timeSec + 's', 15, 64);
+  if (bestTime > 0) {
+    ctx.fillStyle = '#00E5A888'; ctx.font = '10px ' + GF;
+    ctx.fillText('REKOR: ' + bestTime + 's', 15, 82);
+  }
+
+  // Wanted stars
+  ctx.fillStyle = COL.sirenRed; ctx.font = 'bold 18px ' + GF; ctx.textAlign = 'right';
+  let stars = '';
+  for (let i = 0; i < game.wantedLevel; i++) stars += '★';
+  for (let i = game.wantedLevel; i < 5; i++) stars += '☆';
+  ctx.fillText(stars, W - 15, 15);
+
+  // HP bar
+  const barW = 140, barH = 10, barX = W - barW - 15, barY = 44;
+  ctx.fillStyle = '#111'; roundRectFill(barX, barY, barW, barH, 5);
+  const hp = Math.max(0, game.player.health);
+  ctx.fillStyle = hp > 50 ? '#00E5A8' : hp > 25 ? COL.coin : COL.damageBar;
+  roundRectFill(barX, barY, barW * (hp / 100), barH, 5);
+  ctx.fillStyle = COL.white; ctx.font = '9px ' + GF; ctx.textAlign = 'right';
+  ctx.fillText('HP', barX - 5, barY + 9);
+
+  // Difficulty indicator
+  ctx.fillStyle = '#ffffff44'; ctx.font = '10px ' + GF; ctx.textAlign = 'right';
+  ctx.fillText('LV ' + Math.floor(game.difficulty), W - 15, barY + 22);
+
+  if (game.player.boostTimer > 0) {
+    ctx.fillStyle = COL.booster; ctx.font = 'bold 18px ' + GF; ctx.textAlign = 'center';
+    ctx.shadowColor = COL.booster; ctx.shadowBlur = 15;
+    ctx.fillText('BOOST! ' + Math.ceil(game.player.boostTimer / 60) + 's', W / 2, 30);
+    ctx.shadowBlur = 0;
+  }
+
+  if (game.player.rageTimer > 0) {
+    ctx.fillStyle = COL.rage; ctx.font = 'bold 18px ' + GF; ctx.textAlign = 'center';
+    ctx.shadowColor = COL.rage; ctx.shadowBlur = 15;
+    ctx.fillText('RAGE! ' + Math.ceil(game.player.rageTimer / 60) + 's', W / 2, 58);
+    ctx.shadowBlur = 0;
+  }
+
+  if (isDrifting) {
+    ctx.fillStyle = COL.coin; ctx.font = 'bold 16px ' + GF; ctx.textAlign = 'center';
+    ctx.shadowColor = COL.coin; ctx.shadowBlur = 10;
+    ctx.fillText('DRIFT!', W / 2, H - 40);
+    ctx.shadowBlur = 0;
+  }
+
+  drawMinimap();
+
+  if ('ontouchstart' in window) {
+    ctx.fillStyle = '#ffffff08';
+    ctx.fillRect(0, H * 0.3, W / 2, H * 0.4); ctx.fillRect(W / 2, H * 0.3, W / 2, H * 0.4);
+    ctx.fillStyle = '#ffffff18'; ctx.font = '24px ' + GF; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('◀', W * 0.12, H * 0.5); ctx.fillText('▶', W * 0.88, H * 0.5);
+  }
+}
+
+function drawMinimap() {
+  const mmSize = 90, mmX = W - mmSize - 15, mmY = H - mmSize - 15, mmScale = 0.055;
+  ctx.fillStyle = '#0A0F2Ccc'; roundRectFill(mmX, mmY, mmSize, mmSize, 8);
+  ctx.strokeStyle = '#1E5BFF33'; ctx.lineWidth = 1; ctx.beginPath(); roundRectPath(mmX, mmY, mmSize, mmSize, 8); ctx.stroke();
+  const cx = mmX + mmSize / 2, cy = mmY + mmSize / 2;
+
+  ctx.fillStyle = COL.playerCar; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+
+  game.police.forEach(pol => {
+    const dx = (pol.x - game.player.x) * mmScale, dy = (pol.y - game.player.y) * mmScale;
+    if (Math.abs(dx) < mmSize / 2 - 5 && Math.abs(dy) < mmSize / 2 - 5) {
+      ctx.fillStyle = Math.sin(game.sirenPhase) > 0 ? COL.sirenBlue : COL.sirenRed;
+      ctx.beginPath(); ctx.arc(cx + dx, cy + dy, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  game.boosters.forEach(b => {
+    const dx = (b.x - game.player.x) * mmScale, dy = (b.y - game.player.y) * mmScale;
+    if (Math.abs(dx) < mmSize / 2 - 5 && Math.abs(dy) < mmSize / 2 - 5) {
+      ctx.fillStyle = COL.booster; ctx.fillRect(cx + dx - 1.5, cy + dy - 1.5, 3, 3);
+    }
+  });
+  game.rageItems.forEach(r => {
+    const dx = (r.x - game.player.x) * mmScale, dy = (r.y - game.player.y) * mmScale;
+    if (Math.abs(dx) < mmSize / 2 - 5 && Math.abs(dy) < mmSize / 2 - 5) {
+      ctx.fillStyle = COL.rage; ctx.beginPath(); ctx.arc(cx + dx, cy + dy, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  game.coinItems.forEach(c => {
+    const dx = (c.x - game.player.x) * mmScale, dy = (c.y - game.player.y) * mmScale;
+    if (Math.abs(dx) < mmSize / 2 - 5 && Math.abs(dy) < mmSize / 2 - 5) {
+      ctx.fillStyle = COL.coin; ctx.fillRect(cx + dx - 1, cy + dy - 1, 2, 2);
+    }
+  });
+}
+
+// ============ POLICE AI ============
+function updatePolice(pol) {
+  const p = game.player;
+  const dx = p.x - pol.x, dy = p.y - pol.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const targetAngle = Math.atan2(dy, dx);
+
+  let angleDiff = targetAngle - pol.angle;
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+  pol.angle += pol.turnSpeed * Math.sign(angleDiff);
+  pol.speed = pol.baseSpeed;
+  pol.x += Math.cos(pol.angle) * pol.speed;
+  pol.y += Math.sin(pol.angle) * pol.speed;
+
+  const trail = game.policeTrails[pol.id];
+  if (trail) { trail.push({ x: pol.x, y: pol.y, alpha: 0.35 }); if (trail.length > 300) trail.splice(0, 20); }
+
+  const movedDist = Math.sqrt((pol.x - pol.lastX) ** 2 + (pol.y - pol.lastY) ** 2);
+  if (movedDist < 0.3) {
+    pol.stuckTimer++;
+    if (pol.stuckTimer > 90) {
+      const sa = Math.random() * Math.PI * 2, sd = 350 + Math.random() * 200;
+      pol.x = p.x + Math.cos(sa) * sd; pol.y = p.y + Math.sin(sa) * sd;
+      pol.angle = Math.atan2(p.y - pol.y, p.x - pol.x); pol.stuckTimer = 0;
+    }
+  } else { pol.stuckTimer = 0; }
+  pol.lastX = pol.x; pol.lastY = pol.y;
+
+  // Collision
+  const minDist = p.rageTimer > 0 ? 40 : 28;
+  if (dist < minDist) {
+    const nx = dx / dist, ny = dy / dist, overlap = minDist - dist;
+    if (p.rageTimer > 0) {
+      addParticles(pol.x, pol.y, COL.sirenRed, 20); addParticles(pol.x, pol.y, COL.rage, 15); addParticles(pol.x, pol.y, COL.coin, 10);
+      game.score += 500; game.shakeTimer = 8; game.shakeIntensity = 5; pol.destroyed = true;
+    } else {
+      pol.x -= nx * overlap * 0.7; pol.y -= ny * overlap * 0.7;
+      p.x += nx * overlap * 0.3; p.y += ny * overlap * 0.3;
+      pol.angle = Math.atan2(-ny, -nx) + (Math.random() - 0.5) * 0.5; pol.speed *= 0.3;
+      if (p.invincible <= 0) {
+        p.health -= 12; p.invincible = 50; game.shakeTimer = 12; game.shakeIntensity = 8;
+        addParticles((p.x + pol.x) / 2, (p.y + pol.y) / 2, COL.sirenRed, 15);
+        addParticles((p.x + pol.x) / 2, (p.y + pol.y) / 2, '#FFF', 8);
+        p.angle += (Math.random() - 0.5) * 0.3;
+      }
+    }
+  }
+}
+
+// ============ UPDATE ============
+function update() {
+  if (game.state !== 'playing') return;
+
+  game.time++;
+  game.sirenPhase += 0.22;
+
+  // Difficulty ramps up over time
+  game.difficulty = 1 + game.time / 600; // +1 every 10 seconds
+
+  const p = game.player;
+  // Player gradually speeds up: 2.5 -> 4.0 over ~40 seconds
+  p.baseSpeed = Math.min(2.5 + game.time / 480, 4.0);
+  const boosted = p.boostTimer > 0;
+
+  isDrifting = false;
+  const turnSpd = boosted ? p.driftTurnSpeed * 1.3 : p.driftTurnSpeed;
+  if (isLeft()) { p.angle -= turnSpd; isDrifting = true; }
+  if (isRight()) { p.angle += turnSpd; isDrifting = true; }
+
+  // Drift gives speed boost: straight=baseSpeed, drifting=baseSpeed*1.25
+  const driftBonus = isDrifting ? 1.25 : 1.0;
+  p.speed = boosted ? p.maxSpeed : p.baseSpeed * driftBonus;
+
+  p.x += Math.cos(p.angle) * p.speed;
+  p.y += Math.sin(p.angle) * p.speed;
+
+  // Smoke trail
+  if (isDrifting) {
+    const rearX = p.x - Math.cos(p.angle) * (p.h * 0.4);
+    const rearY = p.y - Math.sin(p.angle) * (p.h * 0.4);
+    for (let i = 0; i < 2; i++) {
+      game.trail.push({ x: rearX + (Math.random() - 0.5) * 10, y: rearY + (Math.random() - 0.5) * 10,
+        vx: (Math.random() - 0.5) * 0.6, vy: (Math.random() - 0.5) * 0.6,
+        alpha: 0.45 + Math.random() * 0.2, size: 4 + Math.random() * 5 });
+    }
+  }
+  if (game.trail.length > 800) game.trail.splice(0, 40);
+
+  // Boost
+  if (p.boostTimer > 0) {
+    p.boostTimer--;
+    if (game.time % 2 === 0) {
+      const rx = p.x - Math.cos(p.angle) * 18 + (Math.random() - 0.5) * 8;
+      const ry = p.y - Math.sin(p.angle) * 18 + (Math.random() - 0.5) * 8;
+      game.particles.push({ x: rx, y: ry, vx: -Math.cos(p.angle) * 2 + (Math.random() - 0.5),
+        vy: -Math.sin(p.angle) * 2 + (Math.random() - 0.5), life: 15, maxLife: 15, color: COL.booster, size: 3 + Math.random() * 3 });
+    }
+  }
+
+  // Rage
+  if (p.rageTimer > 0) {
+    p.rageTimer--;
+    p.w += (p.normalW * 2.2 - p.w) * 0.15; p.h += (p.normalH * 2.2 - p.h) * 0.15;
+    if (game.time % 3 === 0) {
+      const ra = Math.random() * Math.PI * 2;
+      game.particles.push({ x: p.x + Math.cos(ra) * 15, y: p.y + Math.sin(ra) * 15,
+        vx: Math.cos(ra) * 1.5, vy: Math.sin(ra) * 1.5, life: 12, maxLife: 12, color: COL.rage, size: 3 + Math.random() * 3 });
+    }
+  } else {
+    p.w += (p.normalW - p.w) * 0.15; p.h += (p.normalH - p.h) * 0.15;
+  }
+
+  if (p.invincible > 0) p.invincible--;
+
+  game.camera.x += (p.x - game.camera.x) * 0.08;
+  game.camera.y += (p.y - game.camera.y) * 0.08;
+
+  // Police
+  game.police.forEach(pol => updatePolice(pol));
+
+  // Wanted level - scales with difficulty
+  game.wantedTimer++;
+  const wantedInterval = Math.max(300, 700 - game.difficulty * 40);
+  if (game.wantedTimer > wantedInterval && game.wantedLevel < 5) {
+    game.wantedLevel++;
+    game.wantedTimer = 0;
+    spawnPolice();
+    // All existing police speed up
+    game.police.forEach(pol => {
+      pol.baseSpeed = Math.min(pol.baseSpeed + 0.4, 7.0);
+      pol.turnSpeed = Math.min(pol.turnSpeed + 0.004, 0.08);
+    });
+  }
+
+  // Continuous police scaling with difficulty
+  if (game.time % 300 === 0) {
+    game.police.forEach(pol => {
+      pol.baseSpeed = Math.min(3.0 + game.difficulty * 0.35, 7.0);
+      pol.turnSpeed = Math.min(0.025 + game.difficulty * 0.004, 0.08);
+    });
+  }
+
+  game.score += 1;
+  if (isDrifting) game.score += 2;
+
+  // Remove destroyed
+  game.police = game.police.filter(pol => { if (pol.destroyed) { delete game.policeTrails[pol.id]; return false; } return true; });
+
+  // Pickups
+  game.boosters = game.boosters.filter(b => {
+    const dx = p.x - b.x, dy = p.y - b.y;
+    if (dx * dx + dy * dy < 500) { p.boostTimer = 240; addParticles(b.x, b.y, COL.booster, 15); return false; }
+    return dx * dx + dy * dy <= 800 * 800;
+  });
+  game.rageItems = game.rageItems.filter(r => {
+    const dx = p.x - r.x, dy = p.y - r.y;
+    if (dx * dx + dy * dy < 500) { p.rageTimer = 300; p.invincible = 300; addParticles(r.x, r.y, COL.rage, 20); game.shakeTimer = 8; game.shakeIntensity = 4; return false; }
+    return dx * dx + dy * dy <= 800 * 800;
+  });
+  game.coinItems = game.coinItems.filter(c => {
+    const dx = p.x - c.x, dy = p.y - c.y;
+    if (dx * dx + dy * dy < 400) { game.coins++; game.score += 100; addParticles(c.x, c.y, COL.coin, 10); return false; }
+    return dx * dx + dy * dy <= 800 * 800;
+  });
+
+  // Spawns
+  game.boosterTimer++; if (game.boosterTimer > 180) { game.boosterTimer = 0; if (game.boosters.length < 5) spawnBooster(); }
+  game.rageSpawnTimer++; if (game.rageSpawnTimer > 400) { game.rageSpawnTimer = 0; if (game.rageItems.length < 3) spawnRage(); }
+  game.coinSpawnTimer++; if (game.coinSpawnTimer > 90) { game.coinSpawnTimer = 0; if (game.coinItems.length < 10) spawnCoin(); }
+
+  // Police spawn - more frequent at higher difficulty
+  game.spawnTimer++;
+  const spawnInterval = Math.max(150, 400 - game.difficulty * 25);
+  if (game.spawnTimer > spawnInterval) {
+    game.spawnTimer = 0;
+    const maxPolice = Math.min(2 + Math.floor(game.difficulty), POLICE_MAX);
+    if (game.police.length < maxPolice) spawnPolice();
+  }
+
+  // Remove far police
+  game.police = game.police.filter(pol => {
+    const dx = p.x - pol.x, dy = p.y - pol.y;
+    if (dx * dx + dy * dy > 1000 * 1000) { delete game.policeTrails[pol.id]; return false; } return true;
+  });
+
+  // Particles
+  game.particles.forEach(pt => { pt.x += pt.vx; pt.y += pt.vy; pt.vx *= 0.94; pt.vy *= 0.94; pt.life--; });
+  game.particles = game.particles.filter(pt => pt.life > 0);
+
+  // Trail fade
+  game.trail.forEach(t => { t.alpha -= 0.003; t.size *= 1.008; if (t.vx) { t.x += t.vx; t.vx *= 0.97; } if (t.vy) { t.y += t.vy; t.vy *= 0.97; } });
+  game.trail = game.trail.filter(t => t.alpha > 0);
+  Object.keys(game.policeTrails).forEach(id => {
+    const tr = game.policeTrails[id]; tr.forEach(t => t.alpha -= 0.001); game.policeTrails[id] = tr.filter(t => t.alpha > 0);
+  });
+
+  if (game.shakeTimer > 0) game.shakeTimer--;
+  if (p.health <= 0) gameOver();
+}
+
+function gameOver() {
+  game.state = 'over';
+  const timeSec = Math.floor(game.time / 60);
+  const newTimeRecord = setBestTime(timeSec);
+  const newScoreRecord = setBestScore(game.score);
+
+  let html = `Skor: ${game.score}<br>Sure: ${timeSec}s<br>Coin: ${game.coins}<br>Aranma: ${'★'.repeat(game.wantedLevel)}<br>Zorluk: LV ${Math.floor(game.difficulty)}`;
+  document.getElementById('finalStats').innerHTML = html;
+
+  let recHtml = '';
+  if (newTimeRecord) recHtml += `YENI SURE REKORU: ${timeSec}s! `;
+  if (newScoreRecord) recHtml += `YENI SKOR REKORU: ${game.score}!`;
+  if (!newTimeRecord && !newScoreRecord) recHtml = `Rekor Sure: ${getBestTime()}s | Rekor Skor: ${getBestScore()}`;
+  document.getElementById('endRecord').innerHTML = recHtml;
+
+  document.getElementById('gameOverScreen').style.display = 'flex';
+}
+
+// ============ DRAW ============
+function draw() {
+  if (game.shakeTimer > 0) {
+    ctx.save();
+    ctx.translate((Math.random() - 0.5) * game.shakeIntensity, (Math.random() - 0.5) * game.shakeIntensity);
+  }
+
+  drawGround();
+  drawSmoke(game.trail, COL.trail);
+  Object.values(game.policeTrails).forEach(tr => drawTrail(tr, COL.sirenBlue + '66', 3));
+  drawBoosters(); drawRageItems(); drawCoins();
+
+  game.police.forEach(pol => drawCar(pol.x, pol.y, pol.angle, pol.w, pol.h, COL.policeCar, true));
+
+  const p = game.player;
+  const showPlayer = p.rageTimer > 0 || p.invincible <= 0 || Math.floor(p.invincible / 3) % 2 === 0;
+  if (showPlayer) {
+    if (p.rageTimer > 0) {
+      const ps = worldToScreen(p.x, p.y);
+      const rageGlow = ctx.createRadialGradient(ps.x, ps.y, 10, ps.x, ps.y, 55);
+      rageGlow.addColorStop(0, COL.rage + '44'); rageGlow.addColorStop(0.6, COL.rage + '18'); rageGlow.addColorStop(1, 'transparent');
+      ctx.fillStyle = rageGlow; ctx.beginPath(); ctx.arc(ps.x, ps.y, 55, 0, Math.PI * 2); ctx.fill();
+    }
+    drawCar(p.x, p.y, p.angle, p.w, p.h, p.rageTimer > 0 ? COL.rage : COL.playerCar, false);
+  }
+
+  drawParticles();
+  if (game.shakeTimer > 0) ctx.restore();
+  drawHUD();
+}
+
+// ============ UTIL ============
+function roundRectFill(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); ctx.fill();
+}
+
+function roundRectPath(x, y, w, h, r) {
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+}
+
+function shadeColor(hex, percent) {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const r = Math.min(255, (num >> 16) + percent);
+  const g = Math.min(255, ((num >> 8) & 0xFF) + percent);
+  const b = Math.min(255, (num & 0xFF) + percent);
+  return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
+}
+
+// ============ LOOP ============
+function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+
+function startGame() {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('gameOverScreen').style.display = 'none';
+  resetGame();
+  game.state = 'playing';
+}
+
+resetGame();
+gameLoop();
+
+// ============ PWA SERVICE WORKER ============
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
